@@ -97,41 +97,66 @@ if page == "🏠 Home":
     """)
 
 # -----------------------------------------------------------
-# DASHBOARD
+# DASHBOARD (WITH FILTERS)
 # -----------------------------------------------------------
 if page == "📊 Dashboard":
     st.header("📊 Agriculture Analytics Dashboard")
 
+    # ----- FILTERS -----
+    st.subheader("🔍 Filters")
+    colA, colB, colC, colD = st.columns(4)
+
+    with colA:
+        crop_filter = st.selectbox("Crop", ["All"] + sorted(df["Crop"].unique()))
+    with colB:
+        state_filter = st.selectbox("State", ["All"] + sorted(df["State"].unique()))
+    with colC:
+        season_filter = st.selectbox("Season", ["All"] + sorted(df["Season"].unique()))
+    with colD:
+        year_filter = st.selectbox("Year", ["All"] + sorted(df["Crop_Year"].unique()))
+
+    df_filtered = df.copy()
+
+    if crop_filter != "All":
+        df_filtered = df_filtered[df_filtered["Crop"] == crop_filter]
+
+    if state_filter != "All":
+        df_filtered = df_filtered[df_filtered["State"] == state_filter]
+
+    if season_filter != "All":
+        df_filtered = df_filtered[df_filtered["Season"] == season_filter]
+
+    if year_filter != "All":
+        df_filtered = df_filtered[df_filtered["Crop_Year"] == year_filter]
+
+    # ----- METRICS -----
     col1, col2, col3 = st.columns(3)
-
     with col1:
-        st.metric("Total Production (tonnes)", f"{df['Production'].sum():,.0f}")
+        st.metric("Total Production (tonnes)", f"{df_filtered['Production'].sum():,.0f}")
     with col2:
-        st.metric("Total Cultivated Area (ha)", f"{df['Area'].sum():,.0f}")
+        st.metric("Total Cultivated Area (ha)", f"{df_filtered['Area'].sum():,.0f}")
     with col3:
-        st.metric("Unique Crops", df["Crop"].nunique())
+        st.metric("Unique Crops", df_filtered["Crop"].nunique())
 
-    # Crop Wise
+    # ----- VISUALS -----
     st.subheader("Crop-wise Production")
     fig1 = px.bar(
-        df.groupby("Crop")["Production"].sum().sort_values(ascending=False),
+        df_filtered.groupby("Crop")["Production"].sum().sort_values(ascending=False),
         labels={"value": "Production", "index": "Crop"},
         title="Crop Production by Type"
     )
     st.plotly_chart(fig1, use_container_width=True)
 
-    # State Wise
     st.subheader("State-wise Production")
     fig2 = px.bar(
-        df.groupby("State")["Production"].sum(),
+        df_filtered.groupby("State")["Production"].sum(),
         title="Production by State"
     )
     st.plotly_chart(fig2, use_container_width=True)
 
-    # Yearly Trend
     st.subheader("Trend Over Years")
     fig3 = px.line(
-        df.groupby("Crop_Year")["Production"].sum().reset_index(),
+        df_filtered.groupby("Crop_Year")["Production"].sum().reset_index(),
         x="Crop_Year", y="Production",
         title="Production Over Years"
     )
@@ -207,4 +232,3 @@ if page == "🌾 Crop Recommendation":
 
         st.success(f"🌟 **Recommended Crop: {recommended_crop}**")
         st.info(f"Expected Productivity: **{prod_val:.2f} tonnes/ha**")
-
