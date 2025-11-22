@@ -10,10 +10,10 @@ import numpy as np
 # -------------------------------
 # Page Config
 # -------------------------------
-st.set_page_config(page_title="AI Farming Assistant", layout="wide")
+st.set_page_config(page_title="AI Farming Assistant - Indian Farmers", layout="wide")
 
 st.markdown("""
-    <h1 style='text-align: center; color: green;'>🌱 AI-Powered Personal Farming Assistant for Kerala Farmers</h1>
+    <h1 style='text-align: center; color: green;'>🇮🇳🌱 AI-Powered Personal Farming Assistant for Indian Farmers</h1>
 """, unsafe_allow_html=True)
 
 # -------------------------------
@@ -22,7 +22,6 @@ st.markdown("""
 @st.cache_data
 def load_data():
     df = pd.read_csv("crop_yield.csv")
-    # Normalize column names by stripping whitespace
     df.columns = df.columns.str.strip()
     return df
 
@@ -40,7 +39,7 @@ menu = st.sidebar.radio(
 # 1️⃣ Dashboard – Analytics
 # -------------------------------
 if menu == "📊 Dashboard":
-    st.subheader("📊 Agriculture Analytics Dashboard")
+    st.subheader("📊 Agriculture Analytics Dashboard (India)")
 
     col1, col2, col3 = st.columns(3)
 
@@ -59,7 +58,7 @@ if menu == "📊 Dashboard":
         labels={"value": "Production (tonnes)", "index": "Crop"},
         title="Crop-wise Production"
     )
-    st.plotly_chart(fig_crop, width='stretch')
+    st.plotly_chart(fig_crop, use_container_width=True)
 
     st.markdown("### 🗺️ Production by State")
     fig_state = px.bar(
@@ -67,23 +66,22 @@ if menu == "📊 Dashboard":
         title="State-wise Production",
         labels={"value": "Production (tonnes)", "index": "State"}
     )
-    st.plotly_chart(fig_state, width='stretch')
+    st.plotly_chart(fig_state, use_container_width=True)
 
     st.markdown("### 📈 Production Trend by Year")
     fig_year = px.line(
         df.groupby("Crop_Year")["Production"].sum().reset_index(),
         x="Crop_Year", y="Production",
-        title="Production Trend Over Years"
+        title="Production Trend Over Years (India)"
     )
-    st.plotly_chart(fig_year, width='stretch')
+    st.plotly_chart(fig_year, use_container_width=True)
 
 # -------------------------------
 # 2️⃣ Crop Yield Predictor (AI Model)
 # -------------------------------
 if menu == "🤖 Crop Yield Predictor":
-    st.subheader("🤖 AI Model: Crop Yield Prediction")
+    st.subheader("🤖 AI Model: Crop Yield Prediction for Indian Farmers")
 
-    # Encode categorical variables
     df_model = df.copy()
     le_state = LabelEncoder()
     le_season = LabelEncoder()
@@ -101,7 +99,6 @@ if menu == "🤖 Crop Yield Predictor":
     model = RandomForestRegressor(n_estimators=200)
     model.fit(X_train, y_train)
 
-    # User Inputs
     st.markdown("### 🔧 Enter Inputs")
     year = st.number_input("Year", min_value=1980, max_value=2050, value=2025)
     area = st.number_input("Area (ha)", min_value=1.0, max_value=50000.0, value=500.0)
@@ -129,13 +126,12 @@ if menu == "🤖 Crop Yield Predictor":
 # 3️⃣ Crop Recommendation System
 # -------------------------------
 if menu == "🌾 Crop Recommendation":
-    st.subheader("🌾 AI-Powered Crop Recommendation")
+    st.subheader("🌾 AI-Powered Crop Recommendation for Indian Farmers")
 
     state_choice = st.selectbox("Select State", df["State"].unique())
     season_choice = st.selectbox("Select Season", df["Season"].unique())
     area_choice = st.number_input("Enter Area (ha)", min_value=1.0, value=100.0)
 
-    # Simple rule-based recommender using avg productivity
     df_filtered = df[(df["State"] == state_choice) & (df["Season"] == season_choice)]
 
     if not df_filtered.empty:
