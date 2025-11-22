@@ -1,148 +1,243 @@
 import streamlit as st
 import pandas as pd
+import numpy as np
 import plotly.express as px
 from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import LabelEncoder
-from sklearn.ensemble import RandomForestRegressor
-from sklearn.metrics import mean_squared_error
-import numpy as np
+from sklearn.ensemble import RandomForestClassifier
+from sklearn.metrics import accuracy_score
+from statsmodels.tsa.arima.model import ARIMA
 
-# -------------------------------
-# Page Config
-# -------------------------------
-st.set_page_config(page_title="AI Farming Assistant - Indian Farmers", layout="wide")
+# ============================
+# PAGE CONFIG
+# ============================
+st.set_page_config(page_title="Indian Farmers AI Dashboard", layout="wide")
 
-st.markdown("""
-    <h1 style='text-align: center; color: green;'>🇮🇳🌱 AI-Powered Personal Farming Assistant for Indian Farmers</h1>
-""", unsafe_allow_html=True)
-
-# -------------------------------
-# Load Data
-# -------------------------------
+# ============================
+# LOAD DATA
+# ============================
 @st.cache_data
 def load_data():
-    df = pd.read_csv("crop_yield.csv")
-    df.columns = df.columns.str.strip()
+    df = pd.read_csv("/mnt/data/crop_yield.csv")   # your file
+    # Fix date column
+    if "date" in df.columns:
+        df["date"] = pd.to_datetime(df["date"], errors="coerce")
     return df
 
 df = load_data()
 
-# -------------------------------
-# Sidebar Navigation
-# -------------------------------
-menu = st.sidebar.radio(
-    "Navigation",
-    ["📊 Dashboard", "🤖 Crop Yield Predictor", "🌾 Crop Recommendation"]
-)
+# ============================
+# CSS STYLING
+# ============================
+st.markdown("""
+<style>
 
-# -------------------------------
-# 1️⃣ Dashboard – Analytics
-# -------------------------------
-if menu == "📊 Dashboard":
-    st.subheader("📊 Agriculture Analytics Dashboard (India)")
+.navbar {
+    background-color: #1E88E5;
+    padding: 15px;
+    border-radius: 10px;
+    width: 100%;
+}
 
-    col1, col2, col3 = st.columns(3)
+.nav-title {
+    color: white;
+    font-size: 24px;
+    font-weight: bold;
+    padding-left: 10px;
+}
 
-    with col1:
-        st.metric("Total Production (tonnes)", f"{df['Production'].sum():,.0f}")
+.dropdown {
+    position: relative;
+    display: inline-block;
+    float: right;
+    margin-right: 20px;
+}
 
-    with col2:
-        st.metric("Total Area (ha)", f"{df['Area'].sum():,.0f}")
+.dropbtn {
+    background-color: white;
+    color: #1E88E5;
+    padding: 12px 20px;
+    font-size: 16px;
+    border: none;
+    border-radius: 8px;
+    cursor: pointer;
+    font-weight: 600;
+}
 
-    with col3:
-        st.metric("Unique Crops", df["Crop"].nunique())
+.dropbtn:hover {
+    background-color: #e3f2fd;
+}
 
-    st.markdown("### 📍 Production by Crop")
-    fig_crop = px.bar(
-        df.groupby("Crop")["Production"].sum().sort_values(ascending=False),
-        labels={"value": "Production (tonnes)", "index": "Crop"},
-        title="Crop-wise Production"
-    )
-    st.plotly_chart(fig_crop, use_container_width=True)
+.dropdown-content {
+    display: none;
+    position: absolute;
+    background-color: white;
+    min-width: 180px;
+    box-shadow: 0px 8px 16px rgba(0,0,0,0.2);
+    z-index: 5;
+    border-radius: 8px;
+}
 
-    st.markdown("### 🗺️ Production by State")
-    fig_state = px.bar(
-        df.groupby("State")["Production"].sum(),
-        title="State-wise Production",
-        labels={"value": "Production (tonnes)", "index": "State"}
-    )
-    st.plotly_chart(fig_state, use_container_width=True)
+.dropdown-content a {
+    color: #1E88E5;
+    padding: 12px 16px;
+    text-decoration: none;
+    display: block;
+    font-weight: 500;
+}
 
-    st.markdown("### 📈 Production Trend by Year")
-    fig_year = px.line(
-        df.groupby("Crop_Year")["Production"].sum().reset_index(),
-        x="Crop_Year", y="Production",
-        title="Production Trend Over Years (India)"
-    )
-    st.plotly_chart(fig_year, use_container_width=True)
+.dropdown-content a:hover {
+    background-color: #e3f2fd;
+}
 
-# -------------------------------
-# 2️⃣ Crop Yield Predictor (AI Model)
-# -------------------------------
-if menu == "🤖 Crop Yield Predictor":
-    st.subheader("🤖 AI Model: Crop Yield Prediction for Indian Farmers")
+.dropdown:hover .dropdown-content {
+    display: block;
+}
 
-    df_model = df.copy()
-    le_state = LabelEncoder()
-    le_season = LabelEncoder()
-    le_crop = LabelEncoder()
+</style>
+""", unsafe_allow_html=True)
 
-    df_model["State_enc"] = le_state.fit_transform(df["State"])
-    df_model["Season_enc"] = le_season.fit_transform(df["Season"])
-    df_model["Crop_enc"] = le_crop.fit_transform(df["Crop"])
+# ============================
+# NAVBAR HTML
+# ============================
+st.markdown("""
+<div class="navbar">
+    <span class="nav-title">Indian Farmers Dashboard</span>
+    <div class="dropdown">
+        <button class="dropbtn">Navigate ▼</button>
+        <div class="dropdown-content">
+            <a href="/?page=Home">Home</a>
+            <a href="/?page=Analytics">Analytics</a>
+            <a href="/?page=Crop_Recommendation">AI Crop Recommendation</a>
+            <a href="/?page=Forecasting">Yield Forecasting</a>
+            <a href="/?page=About">About</a>
+        </div>
+    </div>
+</div>
+""", unsafe_allow_html=True)
 
-    X = df_model[["Crop_Year", "Area", "State_enc", "Season_enc", "Crop_enc"]]
-    y = df_model["Production"]
+query_params = st.experimental_get_query_params()
+page = query_params.get("page", ["Home"])[0]
 
-    X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
 
-    model = RandomForestRegressor(n_estimators=200)
-    model.fit(X_train, y_train)
+# ============================
+# HOME PAGE
+# ============================
+if page == "Home":
+    st.title("🌾 Welcome to the Indian Farmers AI Dashboard")
+    st.write("A unified platform for analytics, AI-powered crop recommendations, and yield forecasting.")
 
-    st.markdown("### 🔧 Enter Inputs")
-    year = st.number_input("Year", min_value=1980, max_value=2050, value=2025)
-    area = st.number_input("Area (ha)", min_value=1.0, max_value=50000.0, value=500.0)
-    state = st.selectbox("State", df["State"].unique())
-    season = st.selectbox("Season", df["Season"].unique())
-    crop = st.selectbox("Crop", df["Crop"].unique())
 
-    if st.button("Predict Yield"):
-        input_data = pd.DataFrame({
-            "Crop_Year": [year],
-            "Area": [area],
-            "State_enc": [le_state.transform([state])[0]],
-            "Season_enc": [le_season.transform([season])[0]],
-            "Crop_enc": [le_crop.transform([crop])[0]]
-        })
+# ============================
+# ANALYTICS PAGE
+# ============================
+elif page == "Analytics":
+    st.title("📊 Data Analytics Dashboard")
 
-        prediction = model.predict(input_data)[0]
-        st.success(f"🌾 **Predicted Production:** {prediction:,.2f} tonnes")
+    st.write("### Dataset Preview")
+    st.dataframe(df.head())
 
-        test_pred = model.predict(X_test)
-        rmse = np.sqrt(mean_squared_error(y_test, test_pred))
-        st.info(f"Model RMSE: {rmse:,.2f}")
-
-# -------------------------------
-# 3️⃣ Crop Recommendation System
-# -------------------------------
-if menu == "🌾 Crop Recommendation":
-    st.subheader("🌾 AI-Powered Crop Recommendation for Indian Farmers")
-
-    state_choice = st.selectbox("Select State", df["State"].unique())
-    season_choice = st.selectbox("Select Season", df["Season"].unique())
-    area_choice = st.number_input("Enter Area (ha)", min_value=1.0, value=100.0)
-
-    df_filtered = df[(df["State"] == state_choice) & (df["Season"] == season_choice)]
-
-    if not df_filtered.empty:
-        df_filtered["Productivity"] = df_filtered["Production"] / df_filtered["Area"]
-
-        top_crop = df_filtered.groupby("Crop")["Productivity"].mean().sort_values(ascending=False).head(1)
-
-        recommended_crop = top_crop.index[0]
-        productivity = top_crop.values[0]
-
-        st.success(f"🌟 **Recommended Crop:** {recommended_crop}")
-        st.write(f"Expected Productivity: **{productivity:.2f} tonnes/ha**")
+    st.write("### Yield Trend Over Time")
+    if "date" in df.columns and "yield" in df.columns:
+        fig = px.line(df, x="date", y="yield", title="Yield Over Time")
+        st.plotly_chart(fig, use_container_width=True)
     else:
-        st.warning("No data available for selected conditions.")
+        st.error("Dataset missing 'date' or 'yield' column.")
+
+    st.write("### Compare Crops")
+    if "crop" in df.columns and "yield" in df.columns:
+        crop_avg = df.groupby("crop")["yield"].mean().reset_index()
+        fig = px.bar(crop_avg, x="crop", y="yield", title="Average Yield by Crop")
+        st.plotly_chart(fig, use_container_width=True)
+
+
+# ============================
+# AI CROP RECOMMENDATION
+# ============================
+elif page == "Crop_Recommendation":
+    st.title("🤖 AI-Powered Crop Recommendation System")
+
+    required_cols = ["nitrogen", "phosphorus", "potassium", "ph", "rainfall", "crop"]
+
+    if all(col in df.columns for col in required_cols):
+
+        # Encode crop labels
+        le = LabelEncoder()
+        df["crop_label"] = le.fit_transform(df["crop"])
+
+        # Features & labels
+        X = df[["nitrogen", "phosphorus", "potassium", "ph", "rainfall"]]
+        y = df["crop_label"]
+
+        # Train-test split
+        X_train, X_test, y_train, y_test = train_test_split(
+            X, y, test_size=0.2, random_state=42
+        )
+
+        model = RandomForestClassifier()
+        model.fit(X_train, y_train)
+
+        accuracy = accuracy_score(y_test, model.predict(X_test))
+        st.success(f"Model Trained Successfully! Accuracy: {accuracy*100:.2f}%")
+
+        st.write("### Enter Soil Parameters")
+
+        n = st.number_input("Nitrogen", 0, 200)
+        p = st.number_input("Phosphorus", 0, 200)
+        k = st.number_input("Potassium", 0, 200)
+        ph = st.number_input("pH Level", 0.0, 14.0)
+        rainfall = st.number_input("Rainfall (mm)", 0.0, 1000.0)
+
+        if st.button("Recommend Crop"):
+            input_data = np.array([[n, p, k, ph, rainfall]])
+            pred = model.predict(input_data)[0]
+            crop = le.inverse_transform([pred])[0]
+
+            st.success(f"🌱 Recommended Crop: **{crop}**")
+
+    else:
+        st.error("Dataset missing necessary columns for crop recommendation model.")
+
+
+# ============================
+# FORECASTING PAGE
+# ============================
+elif page == "Forecasting":
+    st.title("📈 Future Yield Forecasting (ARIMA Model)")
+
+    if "date" in df.columns and "yield" in df.columns:
+        ts = df.set_index("date")["yield"].dropna()
+
+        try:
+            model = ARIMA(ts, order=(1,1,1))
+            model_fit = model.fit()
+
+            forecast = model_fit.forecast(steps=12)
+            forecast_df = pd.DataFrame({
+                "Date": pd.date_range(start=df["date"].max(), periods=12, freq="M"),
+                "Forecast_Yield": forecast
+            })
+
+            fig = px.line(forecast_df, x="Date", y="Forecast_Yield", title="Yield Forecast for Next 12 Months")
+            st.plotly_chart(fig, use_container_width=True)
+
+        except Exception as e:
+            st.error(f"Forecasting Error: {e}")
+
+    else:
+        st.error("Dataset missing 'date' or 'yield' column.")
+
+
+# ============================
+# ABOUT PAGE
+# ============================
+elif page == "About":
+    st.title("ℹ️ About This Project")
+    st.write("""
+    This AI-powered dashboard helps Indian farmers through:
+    - Smart data analytics  
+    - Machine learning crop recommendations  
+    - Time-series based yield forecasting  
+    - Clean and modern UI  
+    """)
+
