@@ -82,7 +82,7 @@ if page == "🏠 Home":
     st.markdown("<h1>🌱 AI Farming Assistant for Indian Farmers</h1>", unsafe_allow_html=True)
 
     st.image(
-        "https://images.pexels.com/photos/5029852/pexels-photo-5029852.jpeg",
+        "https://wallpapercave.com/wp/wp5627799.jpg",
         use_column_width=True,
         caption="Agriculture • India • Sustainability"
     )
