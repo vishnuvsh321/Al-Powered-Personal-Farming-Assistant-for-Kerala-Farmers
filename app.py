@@ -34,7 +34,7 @@ st.markdown("""
 # ---------------------------------------------
 # LOAD DATA
 # ---------------------------------------------
-df = pd.read_csv("/mnt/data/crop_yield.csv") 
+df = pd.read_csv("crop_yield.csv") 
 
 # Fix date column if required
 date_col = [c for c in df.columns if "date" in c.lower()]
