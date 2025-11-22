@@ -96,46 +96,84 @@ if page == "🏠 Home":
     - 🧠 Data insights to support scientific decisions  
     """)
 
-# -----------------------------------------------------------
-# DASHBOARD
-# -----------------------------------------------------------
-if page == "📊 Dashboard":
-    st.header("📊 Agriculture Analytics Dashboard")
+
+# ---------------------------------------------
+# ANALYTICS DASHBOARD
+# ---------------------------------------------
+elif section == "Analytics Dashboard":
+    st.title("📊 Analytics Dashboard")
+
+    # ------------------------------
+    # Filter Slicers
+    # ------------------------------
+    st.subheader("🔎 Filters (Slicers)")
+
+    # Numeric slicers
+    numeric_cols = df.select_dtypes(include=['int', 'float']).columns.tolist()
+    date_cols = df.select_dtypes(include=['datetime']).columns.tolist()
 
     col1, col2, col3 = st.columns(3)
 
     with col1:
-        st.metric("Total Production (tonnes)", f"{df['Production'].sum():,.0f}")
+        num_filter_col = st.selectbox("Select Numeric Column", numeric_cols)
+        num_min, num_max = st.slider(
+            f"Range for {num_filter_col}",
+            float(df[num_filter_col].min()),
+            float(df[num_filter_col].max()),
+            (float(df[num_filter_col].min()), float(df[num_filter_col].max()))
+        )
+
     with col2:
-        st.metric("Total Cultivated Area (ha)", f"{df['Area'].sum():,.0f}")
+        cat_filter_col = st.selectbox("Select Categorical Column", df.select_dtypes(include=['object']).columns)
+        cat_unique = df[cat_filter_col].unique().tolist()
+        cat_selection = st.multiselect("Select Categories", cat_unique, default=cat_unique)
+
     with col3:
-        st.metric("Unique Crops", df["Crop"].nunique())
+        if date_cols:
+            date_col_selected = st.selectbox("Select Date Column", date_cols)
+            date_min, date_max = st.date_input(
+                f"Select Date Range for {date_col_selected}",
+                [df[date_col_selected].min(), df[date_col_selected].max()]
+            )
+        else:
+            date_col_selected = None
 
-    # Crop Wise
-    st.subheader("Crop-wise Production")
-    fig1 = px.bar(
-        df.groupby("Crop")["Production"].sum().sort_values(ascending=False),
-        labels={"value": "Production", "index": "Crop"},
-        title="Crop Production by Type"
-    )
-    st.plotly_chart(fig1, use_container_width=True)
+    # APPLY FILTERS
+    filtered_df = df[
+        (df[num_filter_col] >= num_min) &
+        (df[num_filter_col] <= num_max) &
+        (df[cat_filter_col].isin(cat_selection))
+    ]
 
-    # State Wise
-    st.subheader("State-wise Production")
-    fig2 = px.bar(
-        df.groupby("State")["Production"].sum(),
-        title="Production by State"
-    )
-    st.plotly_chart(fig2, use_container_width=True)
+    if date_col_selected:
+        filtered_df = filtered_df[
+            (filtered_df[date_col_selected] >= pd.to_datetime(date_min)) &
+            (filtered_df[date_col_selected] <= pd.to_datetime(date_max))
+        ]
 
-    # Yearly Trend
-    st.subheader("Trend Over Years")
-    fig3 = px.line(
-        df.groupby("Crop_Year")["Production"].sum().reset_index(),
-        x="Crop_Year", y="Production",
-        title="Production Over Years"
-    )
-    st.plotly_chart(fig3, use_container_width=True)
+    st.write("### Filtered Data")
+    st.dataframe(filtered_df, use_container_width=True)
+
+    # ------------------------------
+    # Dashboard Plots
+    # ------------------------------
+    st.subheader("📈 Visual Insights")
+
+    colA, colB = st.columns(2)
+
+    with colA:
+        numeric_choice = st.selectbox("Select Column for Histogram", numeric_cols)
+        fig1 = px.histogram(filtered_df, x=numeric_choice, nbins=30, title=f"Distribution of {numeric_choice}")
+        st.plotly_chart(fig1, use_container_width=True)
+
+    with colB:
+        if len(numeric_cols) >= 2:
+            num_x = st.selectbox("X-axis", numeric_cols, index=0)
+            num_y = st.selectbox("Y-axis", numeric_cols, index=1)
+            fig2 = px.scatter(filtered_df, x=num_x, y=num_y, trendline="ols",
+                              title=f"{num_x} vs {num_y}")
+            st.plotly_chart(fig2, use_container_width=True)
+
 
 # -----------------------------------------------------------
 # YIELD PREDICTION MODEL
