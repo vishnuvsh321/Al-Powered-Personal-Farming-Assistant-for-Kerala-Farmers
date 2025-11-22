@@ -1,196 +1,152 @@
 import streamlit as st
 import pandas as pd
 import plotly.express as px
-from sklearn.preprocessing import LabelEncoder
-from sklearn.ensemble import RandomForestClassifier, RandomForestRegressor
 from sklearn.model_selection import train_test_split
+from sklearn.preprocessing import LabelEncoder
+from sklearn.ensemble import RandomForestRegressor
+from sklearn.metrics import mean_squared_error
+import numpy as np
 
-# -------------------------------------------------------------
-# PAGE CONFIG
-# -------------------------------------------------------------
-st.set_page_config(
-    page_title="AI Farming Assistant",
-    page_icon="🌾",
-    layout="wide",
-    initial_sidebar_state="expanded"
-)
+# -------------------------------
+# Page Config
+# -------------------------------
+st.set_page_config(page_title="AI Farming Assistant", layout="wide")
 
-# Green-white theme
 st.markdown("""
-<style>
-body { background-color: #f7fff7; }
-</style>
+    <h1 style='text-align: center; color: green;'>🌱 AI-Powered Personal Farming Assistant for Kerala Farmers</h1>
 """, unsafe_allow_html=True)
 
-# -------------------------------------------------------------
-# LOAD DATA
-# -------------------------------------------------------------
+# -------------------------------
+# Load Data
+# -------------------------------
 @st.cache_data
 def load_data():
-    df = pd.read_csv("crop_yield.csv")   # <-- file in your repo root
+    df = pd.read_csv("crop_yield.csv")
+    # Normalize column names by stripping whitespace
+    df.columns = df.columns.str.strip()
     return df
 
 df = load_data()
 
-st.title("🌾 AI-Powered Personal Farming Assistant for Kerala Farmers")
-st.write("A smart dashboard for analytics, predictions, crop recommendations and decision support.")
+# -------------------------------
+# Sidebar Navigation
+# -------------------------------
+menu = st.sidebar.radio(
+    "Navigation",
+    ["📊 Dashboard", "🤖 Crop Yield Predictor", "🌾 Crop Recommendation"]
+)
 
-# Sidebar navigation
-menu = st.sidebar.radio("Navigation", [
-    "📊 Data Overview",
-    "📈 Analytics Dashboard",
-    "🤖 Crop Recommendation (AI)",
-    "📉 Yield Prediction (AI)",
-    "🧪 Fertilizer–Pesticide Optimizer",
-    "💬 Smart Farming Chatbot"
-])
+# -------------------------------
+# 1️⃣ Dashboard – Analytics
+# -------------------------------
+if menu == "📊 Dashboard":
+    st.subheader("📊 Agriculture Analytics Dashboard")
 
-# -------------------------------------------------------------
-# 1. DATA OVERVIEW
-# -------------------------------------------------------------
-if menu == "📊 Data Overview":
-    st.header("📊 Dataset Overview")
-    st.write(df.head())
-    st.write("### Dataset Summary")
-    st.write(df.describe())
-    st.write("### Columns:", df.columns.tolist())
+    col1, col2, col3 = st.columns(3)
 
+    with col1:
+        st.metric("Total Production (tonnes)", f"{df['Production'].sum():,.0f}")
 
-# -------------------------------------------------------------
-# 2. ANALYTICS DASHBOARD
-# -------------------------------------------------------------
-elif menu == "📈 Analytics Dashboard":
-    st.header("📈 Analytics Dashboard")
+    with col2:
+        st.metric("Total Area (ha)", f"{df['Area'].sum():,.0f}")
 
-    # Crop production over years
-    st.subheader("🌾 Crop Production Over Years")
-    crop = st.selectbox("Select Crop", df["Crop"].unique())
-    crop_df = df[df["Crop"] == crop]
+    with col3:
+        st.metric("Unique Crops", df["Crop"].nunique())
 
-    fig = px.line(
-        crop_df,
-        x="Crop_Year",
-        y="Production",
-        markers=True,
-        title=f"Production Trend of {crop}"
+    st.markdown("### 📍 Production by Crop")
+    fig_crop = px.bar(
+        df.groupby("Crop")["Production"].sum().sort_values(ascending=False),
+        labels={"value": "Production (tonnes)", "index": "Crop"},
+        title="Crop-wise Production"
     )
-    st.plotly_chart(fig, use_container_width=True)
+    st.plotly_chart(fig_crop, width='stretch')
 
-    # State wise production
-    st.subheader("🏞 State-wise Production")
-    fig2 = px.bar(
-        df.groupby("State")["Production"].sum().reset_index(),
-        x="State", y="Production",
-        title="Total Production by State"
+    st.markdown("### 🗺️ Production by State")
+    fig_state = px.bar(
+        df.groupby("State")["Production"].sum(),
+        title="State-wise Production",
+        labels={"value": "Production (tonnes)", "index": "State"}
     )
-    st.plotly_chart(fig2, use_container_width=True)
+    st.plotly_chart(fig_state, width='stretch')
 
-    # Rainfall vs Yield
-    st.subheader("☔ Rainfall vs Yield")
-    fig3 = px.scatter(
-        df,
-        x="Annual_Rainfall",
-        y="Yield",
-        color="Crop",
-        title="Relationship Between Rainfall & Yield"
+    st.markdown("### 📈 Production Trend by Year")
+    fig_year = px.line(
+        df.groupby("Crop_Year")["Production"].sum().reset_index(),
+        x="Crop_Year", y="Production",
+        title="Production Trend Over Years"
     )
-    st.plotly_chart(fig3, use_container_width=True)
+    st.plotly_chart(fig_year, width='stretch')
 
+# -------------------------------
+# 2️⃣ Crop Yield Predictor (AI Model)
+# -------------------------------
+if menu == "🤖 Crop Yield Predictor":
+    st.subheader("🤖 AI Model: Crop Yield Prediction")
 
-# -------------------------------------------------------------
-# 3. CROP RECOMMENDATION (AI)
-# -------------------------------------------------------------
-elif menu == "🤖 Crop Recommendation (AI)":
-    st.header("🤖 AI Crop Recommendation System")
+    # Encode categorical variables
+    df_model = df.copy()
+    le_state = LabelEncoder()
+    le_season = LabelEncoder()
+    le_crop = LabelEncoder()
 
-    df_ml = df.copy()
-    label_cols = ["Crop", "Season", "State"]
-    encoders = {}
+    df_model["State_enc"] = le_state.fit_transform(df["State"])
+    df_model["Season_enc"] = le_season.fit_transform(df["Season"])
+    df_model["Crop_enc"] = le_crop.fit_transform(df["Crop"])
 
-    for col in label_cols:
-        enc = LabelEncoder()
-        df_ml[col] = enc.fit_transform(df_ml[col])
-        encoders[col] = enc
+    X = df_model[["Crop_Year", "Area", "State_enc", "Season_enc", "Crop_enc"]]
+    y = df_model["Production"]
 
-    X = df_ml[["Season", "State", "Annual_Rainfall", "Fertilizer", "Pesticide"]]
-    y = df_ml["Crop"]
+    X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
 
-    model = RandomForestClassifier()
-    model.fit(X, y)
+    model = RandomForestRegressor(n_estimators=200)
+    model.fit(X_train, y_train)
 
-    season_in = st.selectbox("Season", df["Season"].unique())
-    state_in = st.selectbox("State", df["State"].unique())
-    rain_in = st.number_input("Annual Rainfall (mm)")
-    fert_in = st.number_input("Fertilizer (kg/ha)")
-    pest_in = st.number_input("Pesticide (kg/ha)")
-
-    if st.button("Recommend Crop"):
-        input_data = [[
-            encoders["Season"].transform([season_in])[0],
-            encoders["State"].transform([state_in])[0],
-            rain_in, fert_in, pest_in
-        ]]
-        pred = model.predict(input_data)[0]
-        st.success(f"🌱 Recommended Crop: **{encoders['Crop'].inverse_transform([pred])[0]}**")
-
-
-# -------------------------------------------------------------
-# 4. YIELD PREDICTION (AI)
-# -------------------------------------------------------------
-elif menu == "📉 Yield Prediction (AI)":
-    st.header("📉 AI Yield Prediction")
-
-    X = df[["Area", "Annual_Rainfall", "Fertilizer", "Pesticide"]]
-    y = df["Yield"]
-
-    reg_model = RandomForestRegressor()
-    reg_model.fit(X, y)
-
-    area_in = st.number_input("Area (ha)")
-    rain_in = st.number_input("Annual Rainfall (mm)")
-    fert_in = st.number_input("Fertilizer (kg/ha)")
-    pest_in = st.number_input("Pesticide (kg/ha)")
+    # User Inputs
+    st.markdown("### 🔧 Enter Inputs")
+    year = st.number_input("Year", min_value=1980, max_value=2050, value=2025)
+    area = st.number_input("Area (ha)", min_value=1.0, max_value=50000.0, value=500.0)
+    state = st.selectbox("State", df["State"].unique())
+    season = st.selectbox("Season", df["Season"].unique())
+    crop = st.selectbox("Crop", df["Crop"].unique())
 
     if st.button("Predict Yield"):
-        pred = reg_model.predict([[area_in, rain_in, fert_in, pest_in]])[0]
-        st.success(f"🌾 Expected Yield: **{pred:.2f} tons/ha**")
+        input_data = pd.DataFrame({
+            "Crop_Year": [year],
+            "Area": [area],
+            "State_enc": [le_state.transform([state])[0]],
+            "Season_enc": [le_season.transform([season])[0]],
+            "Crop_enc": [le_crop.transform([crop])[0]]
+        })
 
+        prediction = model.predict(input_data)[0]
+        st.success(f"🌾 **Predicted Production:** {prediction:,.2f} tonnes")
 
-# -------------------------------------------------------------
-# 5. OPTIMIZER
-# -------------------------------------------------------------
-elif menu == "🧪 Fertilizer–Pesticide Optimizer":
-    st.header("🧪 Fertilizer & Pesticide Optimization")
+        test_pred = model.predict(X_test)
+        rmse = np.sqrt(mean_squared_error(y_test, test_pred))
+        st.info(f"Model RMSE: {rmse:,.2f}")
 
-    opt = df.groupby("Crop")[["Fertilizer", "Pesticide", "Yield"]].mean().reset_index()
-    best_crop = st.selectbox("Select Crop", opt["Crop"].unique())
-    row = opt[opt["Crop"] == best_crop].iloc[0]
+# -------------------------------
+# 3️⃣ Crop Recommendation System
+# -------------------------------
+if menu == "🌾 Crop Recommendation":
+    st.subheader("🌾 AI-Powered Crop Recommendation")
 
-    st.success(f"""
-    ### Optimal Inputs for {best_crop}
-    - 🌱 **Fertilizer:** {row['Fertilizer']:.2f} kg/ha  
-    - 🐛 **Pesticide:** {row['Pesticide']:.2f} kg/ha  
-    - 📈 **Average Yield:** {row['Yield']:.2f} tons/ha  
-    """)
+    state_choice = st.selectbox("Select State", df["State"].unique())
+    season_choice = st.selectbox("Select Season", df["Season"].unique())
+    area_choice = st.number_input("Enter Area (ha)", min_value=1.0, value=100.0)
 
+    # Simple rule-based recommender using avg productivity
+    df_filtered = df[(df["State"] == state_choice) & (df["Season"] == season_choice)]
 
-# -------------------------------------------------------------
-# 6. SMART CHATBOT
-# -------------------------------------------------------------
-elif menu == "💬 Smart Farming Chatbot":
-    st.header("💬 Smart Farming Chat Assistant")
+    if not df_filtered.empty:
+        df_filtered["Productivity"] = df_filtered["Production"] / df_filtered["Area"]
 
-    query = st.text_input("Ask a crop, farming, fertilizer, or weather question:")
+        top_crop = df_filtered.groupby("Crop")["Productivity"].mean().sort_values(ascending=False).head(1)
 
-    if query:
-        q = query.lower()
-        if "rain" in q:
-            st.write("Rainfall affects yield strongly. Choose crops tolerant to high rainfall like Rice or Coconut.")
-        elif "fertilizer" in q:
-            st.write("Optimal fertilizer values vary by crop. See the Optimizer tab for best results.")
-        elif "pest" in q:
-            st.write("Pesticide levels greatly influence yield. Moderate use improves productivity.")
-        elif "yield" in q:
-            st.write("Yield is influenced by area, rainfall, fertilizer, and pesticide usage.")
-        else:
-            st.write("I'm still learning! Try asking about rainfall, fertilizer, pests, or yield.")
+        recommended_crop = top_crop.index[0]
+        productivity = top_crop.values[0]
+
+        st.success(f"🌟 **Recommended Crop:** {recommended_crop}")
+        st.write(f"Expected Productivity: **{productivity:.2f} tonnes/ha**")
+    else:
+        st.warning("No data available for selected conditions.")
