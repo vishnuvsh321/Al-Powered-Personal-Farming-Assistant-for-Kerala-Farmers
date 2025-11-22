@@ -18,7 +18,7 @@ st.set_page_config(page_title="Indian Farmers AI Dashboard", layout="wide")
 # ============================
 @st.cache_data
 def load_data():
-    df = pd.read_csv("/mnt/data/crop_yield.csv")   # your file
+    df = pd.read_csv("crop_yield.csv")   # your file
     # Fix date column
     if "date" in df.columns:
         df["date"] = pd.to_datetime(df["date"], errors="coerce")
