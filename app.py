@@ -163,12 +163,11 @@ if page == "📊 Dashboard":
     st.plotly_chart(fig3, use_container_width=True)
 
 # -----------------------------------------------------------
-# YIELD PREDICTION MODEL (FAST + FIXED ONE-HOT ENCODING)
+# YIELD PREDICTION MODEL (CONSTANT OUTPUT FIXED)
 # -----------------------------------------------------------
 if page == "🤖 Yield Prediction":
     st.header("🤖 AI Model: Crop Yield Prediction")
 
-    # ---------- CACHE MODEL TRAINING ----------
     @st.cache_resource
     def train_yield_model(df):
         df_m = df.copy()
@@ -177,26 +176,27 @@ if page == "🤖 Yield Prediction":
         Q1 = df_m["Production"].quantile(0.25)
         Q3 = df_m["Production"].quantile(0.75)
         IQR = Q3 - Q1
-        df_m = df_m[(df_m["Production"] >= Q1 - 1.5 * IQR) &
-                    (df_m["Production"] <= Q3 + 1.5 * IQR)]
+        df_m = df_m[(df_m["Production"] >= Q1 - 1.5*IQR) &
+                    (df_m["Production"] <= Q3 + 1.5*IQR)]
 
-        # FEATURE ENGINEERING
-        df_m["Yield"] = df_m["Production"] / df_m["Area"]
+        # REMOVE Yield — DO NOT USE IT AS A FEATURE
+        # ADD LOG AREA
+        df_m["Area_log"] = np.log1p(df_m["Area"])
 
         # ONE HOT ENCODING
         df_m = pd.get_dummies(df_m, columns=["State", "Season", "Crop"], drop_first=False)
 
-        # FEATURES & TARGET
-        X = df_m.drop(["Production"], axis=1)
+        # FEATURES (no Production, no Yield, no Area)
+        X = df_m.drop(["Production", "Area"], axis=1)
+
+        # TARGET
         y = np.log1p(df_m["Production"])
 
-        # SPLIT
         from sklearn.model_selection import train_test_split
         X_train, X_test, y_train, y_test = train_test_split(
             X, y, test_size=0.2, random_state=42
         )
 
-        # RANDOM FOREST MODEL
         from sklearn.ensemble import RandomForestRegressor
         model = RandomForestRegressor(
             n_estimators=400,
@@ -206,58 +206,51 @@ if page == "🤖 Yield Prediction":
             n_jobs=-1,
             random_state=42
         )
-        model.fit(X_train, y_train)
 
+        model.fit(X_train, y_train)
         return model, X, X_test, y_test
 
-    # ---- train once & reuse forever ----
+    # Train once
     model, X, X_test, y_test = train_yield_model(df)
 
-    # -------- USER INPUT FORM --------
-    st.subheader("Enter Inputs for Prediction")
-
+    # ---- User Input ----
     year = st.number_input("Crop Year", min_value=1990, max_value=2050, value=2024)
     area = st.number_input("Area (ha)", min_value=1.0, value=500.0)
     state = st.selectbox("State", df["State"].unique())
     season = st.selectbox("Season", df["Season"].unique())
     crop = st.selectbox("Crop", df["Crop"].unique())
 
-    # -------- BUILD USER INPUT EXACTLY MATCHING X --------
+    # BUILD USER INPUT
     user_input = {}
 
     for col in X.columns:
-
-        # 1. Numerical columns
         if col == "Crop_Year":
             user_input[col] = year
-        elif col == "Area":
-            user_input[col] = area
-        elif col == "Yield":
-            user_input[col] = 0  # placeholder
+        elif col == "Area_log":
+            user_input[col] = np.log1p(area)
 
-        # 2. One-hot encoded category columns
         elif col.startswith("State_"):
             user_input[col] = 1 if col == f"State_{state}" else 0
+
         elif col.startswith("Season_"):
             user_input[col] = 1 if col == f"Season_{season}" else 0
+
         elif col.startswith("Crop_"):
             user_input[col] = 1 if col == f"Crop_{crop}" else 0
 
-        # 3. Any other column (fallback)
         else:
             user_input[col] = 0
 
-    # Final user dataframe (correct alignment)
-    user_df = pd.DataFrame([user_input], columns=X.columns)
+    # Make sure order matches training columns
+    user_df = pd.DataFrame([user_input])[X.columns]
 
-    # -------- PREDICT --------
     if st.button("Predict Yield"):
         log_pred = model.predict(user_df)[0]
-        pred = np.expm1(log_pred)  # inverse log-transform
+        pred = np.expm1(log_pred)
 
-        st.success(f"🌾 **Predicted Yield: {pred:,.2f} tonnes**")
+        st.success(f"🌾 Predicted Yield: {pred:,.2f} tonnes")
 
-        # REAL RMSE
+        # RMSE
         from sklearn.metrics import mean_squared_error
         y_test_real = np.expm1(y_test)
         y_pred_real = np.expm1(model.predict(X_test))
