@@ -286,12 +286,6 @@ if page == "🤖 Yield Prediction":
                     user_row[feat] = year
                 elif feat == "Area":
                     user_row[feat] = area
-                elif feat == "Annual_Rainfall":
-                    user_row[feat] = extras_vals.get("Annual_Rainfall", df["Annual_Rainfall"].median())
-                elif feat == "Fertilizer":
-                    user_row[feat] = extras_vals.get("Fertilizer", df["Fertilizer"].median()) if "Fertilizer" in X.columns else 0
-                elif feat == "Pesticide":
-                    user_row[feat] = extras_vals.get("Pesticide", df["Pesticide"].median()) if "Pesticide" in X.columns else 0
                 elif feat == "State_encoded":
                     user_row[feat] = mapping_state.get(state, default_state_enc)
                 elif feat == "Season_encoded":
